@@ -17,6 +17,7 @@ import AllSessionsScreen from './src/screens/AllSessionsScreen';
 import PaywallScreen from './src/screens/PaywallScreen';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { PremiumProvider } from './src/context/PremiumContext';
+import { SubscriptionProvider } from './src/context/SubscriptionProvider.js';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -70,14 +71,17 @@ function MainTabs() {
 }
 
 function AppNavigator() {
+  const { colors } = useTheme();
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="MainTabs" component={MainTabs} />
-      <Stack.Screen name="About" component={AboutScreen} />
-      <Stack.Screen name="HowItWorks" component={HowItWorksScreen} />
-      <Stack.Screen name="AllSessions" component={AllSessionsScreen} />
-      <Stack.Screen name="Paywall" component={PaywallScreen} />
-    </Stack.Navigator>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <Stack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+        <Stack.Screen name="MainTabs" component={MainTabs} />
+        <Stack.Screen name="About" component={AboutScreen} />
+        <Stack.Screen name="HowItWorks" component={HowItWorksScreen} />
+        <Stack.Screen name="AllSessions" component={AllSessionsScreen} />
+        <Stack.Screen name="Paywall" component={PaywallScreen} />
+      </Stack.Navigator>
+    </View>
   );
 }
 
@@ -131,7 +135,6 @@ export default function App() {
       console.error('Error loading theme:', error);
     } finally {
       setIsReady(true);
-      // Ocultar el splash screen cuando esté listo
       await SplashScreen.hideAsync();
     }
   };
@@ -146,14 +149,21 @@ export default function App() {
 
   console.log('🎬 App renderizado, montando PremiumProvider...');
 
+  const isDark = theme === 'dark' || (theme === 'system' && colorScheme === 'dark');
+  const backgroundColor = isDark ? '#0f172a' : '#ffffff';
+
   return (
     <ThemeProvider theme={theme === 'system' ? colorScheme : theme}>
-      <PremiumProvider>
-        <NavigationContainer>
-          <AppNavigator />
-          <StatusBar style={theme === 'dark' || (theme === 'system' && colorScheme === 'dark') ? 'light' : 'dark'} />
-        </NavigationContainer>
-      </PremiumProvider>
+      <SubscriptionProvider>
+        <PremiumProvider>
+          <View style={{ flex: 1, backgroundColor }}>
+            <NavigationContainer theme={{ colors: { background: backgroundColor } }}>
+              <AppNavigator />
+              <StatusBar style={isDark ? 'light' : 'dark'} />
+            </NavigationContainer>
+          </View>
+        </PremiumProvider>
+      </SubscriptionProvider>
     </ThemeProvider>
   );
 }

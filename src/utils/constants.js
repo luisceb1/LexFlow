@@ -19,9 +19,8 @@ export const SESSIONS = [
 export const DEFAULT_SESSION_DURATION = 25 * 60;
 
 export const SUBSCRIPTION_PRICES = {
-  MONTHLY: { label: 'Mensual', price: '0,50 €/mes', identifier: 'monthly' },
-  ANNUAL: { label: 'Anual', price: '4,00 €/año', identifier: 'annual' },
-  LIFETIME: { label: 'De por Vida', price: '22,99 €', identifier: 'lifetime1' },
+  MONTHLY: { label: 'Mensual', price: '1,99 €/mes', identifier: 'mensual' },
+  ANNUAL: { label: 'Anual', price: '9,99 €/año', identifier: 'anual' },
 };
 
 export const STORAGE_KEYS = {

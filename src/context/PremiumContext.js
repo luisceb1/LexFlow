@@ -80,13 +80,12 @@ export const PremiumProvider = ({ children }) => {
         await Purchases.setLogLevel(LOG_LEVEL.DEBUG);
       }
 
-      // Configurar RevenueCat con la API key
-      await Purchases.configure({
-        apiKey: REVENUECAT_API_KEY,
-      });
+      // Usar SubscriptionService para inicializar
+      const SubscriptionService = require('../utils/subscriptionService').SubscriptionService;
+      await SubscriptionService.inicializar(REVENUECAT_API_KEY);
 
       // Obtener información del cliente
-      const customerInfoResult = await Purchases.getCustomerInfo();
+      const customerInfoResult = await SubscriptionService.obtenerInfoCliente();
       updateCustomerInfo(customerInfoResult);
 
       // Obtener offerings disponibles

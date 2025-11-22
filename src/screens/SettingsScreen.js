@@ -163,28 +163,8 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
-  const handleOpenPaywall = async () => {
-    try {
-      const {
-        presentRevenueCatPaywall,
-        isRevenueCatPaywallAvailable,
-      } = require('../utils/revenueCatPaywall');
-
-      if (!isRevenueCatPaywallAvailable()) {
-        Alert.alert(
-          'Requiere build nativo',
-          'El paywall de RevenueCat sólo funciona en builds creados con "npx expo run:ios" o "npx expo run:android".'
-        );
-        return;
-      }
-
-      await presentRevenueCatPaywall('default');
-    } catch (error) {
-      Alert.alert(
-        'Error',
-        error?.message || 'No se pudo abrir el paywall de RevenueCat.'
-      );
-    }
+  const handleOpenPaywall = () => {
+    navigation.navigate('Paywall');
   };
 
   const handleManageSubscription = async () => {
@@ -211,6 +191,18 @@ export default function SettingsScreen({ navigation }) {
   const handleContact = () => {
     Linking.openURL('mailto:support@cebr.xyz?subject=LexFlow - Comentarios').catch(() => {
       Alert.alert('Error', 'No se pudo abrir el cliente de correo');
+    });
+  };
+
+  const handleOpenTerms = () => {
+    Linking.openURL('https://cebr.xyz/terminos').catch(() => {
+      Alert.alert('Error', 'No se pudo abrir los términos de uso');
+    });
+  };
+
+  const handleOpenPrivacy = () => {
+    Linking.openURL('https://cebr.xyz/aviso-legal').catch(() => {
+      Alert.alert('Error', 'No se pudo abrir la política de privacidad');
     });
   };
 
@@ -279,12 +271,12 @@ export default function SettingsScreen({ navigation }) {
       fontWeight: 'bold',
     },
     premiumStatus: {
-      backgroundColor: isPremium ? colors.success : colors.surface,
+      backgroundColor: isPremium ? colors.primary : colors.surface,
       padding: 16,
       borderRadius: 12,
       marginBottom: 16,
       borderWidth: 1,
-      borderColor: isPremium ? colors.success : colors.border,
+      borderColor: isPremium ? colors.primary : colors.border,
     },
     premiumStatusText: {
       fontSize: 16,
@@ -600,7 +592,7 @@ export default function SettingsScreen({ navigation }) {
                   <Text style={styles.premiumBannerButtonText}>Prueba gratis</Text>
                 </TouchableOpacity>
                 <Text style={styles.premiumBannerPrice}>
-                  Luego 4,00 €/año, facturado anualmente.
+                  Luego desde 1,99 €/mes o 9,99 €/año.
                 </Text>
               </TouchableOpacity>
             </View>
@@ -961,6 +953,14 @@ export default function SettingsScreen({ navigation }) {
           </TouchableOpacity>
           <TouchableOpacity style={styles.linkButton} onPress={handleContact}>
             <Text style={styles.linkButtonText} numberOfLines={2}>Comentarios al Desarrollador</Text>
+            <Text style={styles.chevronIcon}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.linkButton} onPress={handleOpenTerms}>
+            <Text style={styles.linkButtonText} numberOfLines={2}>Términos de Uso</Text>
+            <Text style={styles.chevronIcon}>›</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.linkButton} onPress={handleOpenPrivacy}>
+            <Text style={styles.linkButtonText} numberOfLines={2}>Política de Privacidad</Text>
             <Text style={styles.chevronIcon}>›</Text>
           </TouchableOpacity>
         </View>
