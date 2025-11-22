@@ -23,7 +23,7 @@ import {
   setupNotificationActions,
 } from '../utils/timerNotification';
 import { updateTimerWidget, clearTimerWidget } from '../utils/timerWidget';
-import { syncSessionToCalendar } from '../utils/calendarSync';
+import { syncSessionToCalendar, isCalendarSyncEnabled } from '../utils/calendarSync';
 import { startSessionBlock, endSessionBlock, initializeAppBlocker } from '../utils/appBlocker';
 
 const { width } = Dimensions.get('window');
@@ -84,6 +84,37 @@ export default function TimerScreen() {
       endSessionBlock();
     };
   }, []);
+
+  // Deshabilitar funciones premium si el usuario pierde premium
+  useEffect(() => {
+    const disablePremiumFeatures = async () => {
+      if (!isPremium) {
+        // Deshabilitar auto-inicio si no es premium
+        if (autoStart) {
+          setAutoStart(false);
+          await AsyncStorage.setItem('autoStart', 'false');
+        }
+        // Deshabilitar modo comprometido si no es premium
+        if (committedMode) {
+          setCommittedMode(false);
+          await AsyncStorage.setItem('committedMode', 'false');
+        }
+        // Cambiar sesión personalizada a sesión por defecto si no es premium
+        const selectedSession = await AsyncStorage.getItem('selectedSession');
+        if (selectedSession === 'personalizada' || selectedSessionId === 'personalizada') {
+          setSelectedSessionId(null);
+          setCurrentSessionDuration(DEFAULT_SESSION_DURATION);
+          if (currentPhase === 'trabajo' && !isRunning) {
+            setTimeLeft(DEFAULT_SESSION_DURATION);
+          }
+          await AsyncStorage.setItem('selectedSession', 'revision-expediente');
+          // Limpiar duración personalizada guardada
+          await AsyncStorage.setItem('customDuration', '25');
+        }
+      }
+    };
+    disablePremiumFeatures();
+  }, [isPremium]);
   
   // Listener para cambios en la sesión seleccionada
   useEffect(() => {
@@ -91,8 +122,9 @@ export default function TimerScreen() {
       try {
         const selectedSession = await AsyncStorage.getItem('selectedSession');
         if (selectedSession) {
-          if (selectedSession === 'personalizada') {
-            // Cargar duración personalizada
+        if (selectedSession === 'personalizada') {
+          // Solo cargar sesión personalizada si el usuario es premium
+          if (isPremium) {
             const customDur = await AsyncStorage.getItem('customDuration');
             const minutes = customDur ? parseInt(customDur, 10) : 25;
             const duration = (isNaN(minutes) || minutes <= 0 ? 25 : minutes) * 60;
@@ -104,6 +136,17 @@ export default function TimerScreen() {
               }
             }
           } else {
+            // Si no es premium, cambiar a sesión por defecto
+            if (selectedSessionId === 'personalizada') {
+              setSelectedSessionId(null);
+              setCurrentSessionDuration(DEFAULT_SESSION_DURATION);
+              if (currentPhase === 'trabajo' && !isRunning) {
+                setTimeLeft(DEFAULT_SESSION_DURATION);
+              }
+              await AsyncStorage.setItem('selectedSession', 'revision-expediente');
+            }
+          }
+        } else {
             const session = SESSIONS.find(s => s.id === selectedSession);
             if (session && session.id !== selectedSessionId) {
               setSelectedSessionId(session.id);
@@ -162,6 +205,20 @@ export default function TimerScreen() {
 
   useEffect(() => {
     if (isRunning) {
+      // Verificar que si es sesión personalizada, el usuario siga siendo premium
+      if (selectedSessionId === 'personalizada' && !isPremium) {
+        // Si perdió premium durante sesión personalizada, cambiar a sesión por defecto
+        setSelectedSessionId(null);
+        setCurrentSessionDuration(DEFAULT_SESSION_DURATION);
+        setTimeLeft(DEFAULT_SESSION_DURATION);
+        setIsRunning(false);
+        Alert.alert(
+          'Suscripción Premium Requerida',
+          'Tu suscripción premium ha expirado. La sesión personalizada ha sido cancelada.'
+        );
+        return;
+      }
+      
       // Iniciar sesión si no hay una activa
       if (sessionStartTime.current === null) {
         sessionStartTime.current = Date.now();
@@ -172,8 +229,10 @@ export default function TimerScreen() {
           sessionType: selectedSessionId || 'default',
           timestamp: sessionStartTime.current,
         });
-        // Activar bloqueador de apps si está habilitado
-        startSessionBlock();
+        // Activar bloqueador de apps si está habilitado (solo si es premium)
+        if (isPremium) {
+          startSessionBlock();
+        }
       }
       
       intervalRef.current = setInterval(() => {
@@ -245,24 +304,34 @@ export default function TimerScreen() {
     try {
       const autoStartValue = await AsyncStorage.getItem('autoStart');
       if (autoStartValue !== null) {
-        setAutoStart(autoStartValue === 'true');
+        // Solo cargar autoStart si el usuario es premium
+        setAutoStart(isPremium && autoStartValue === 'true');
       }
       
       const committed = await AsyncStorage.getItem('committedMode');
       if (committed !== null) {
-        setCommittedMode(committed === 'true');
+        // Solo cargar committedMode si el usuario es premium
+        setCommittedMode(isPremium && committed === 'true');
       }
       
       const selectedSession = await AsyncStorage.getItem('selectedSession');
       if (selectedSession) {
         if (selectedSession === 'personalizada') {
-          // Cargar duración personalizada
-          const customDur = await AsyncStorage.getItem('customDuration');
-          const minutes = customDur ? parseInt(customDur, 10) : 25;
-          const duration = (isNaN(minutes) || minutes <= 0 ? 25 : minutes) * 60;
-          setSelectedSessionId('personalizada');
-          setCurrentSessionDuration(duration);
-          setTimeLeft(duration);
+          // Solo cargar sesión personalizada si el usuario es premium
+          if (isPremium) {
+            const customDur = await AsyncStorage.getItem('customDuration');
+            const minutes = customDur ? parseInt(customDur, 10) : 25;
+            const duration = (isNaN(minutes) || minutes <= 0 ? 25 : minutes) * 60;
+            setSelectedSessionId('personalizada');
+            setCurrentSessionDuration(duration);
+            setTimeLeft(duration);
+          } else {
+            // Si no es premium, resetear a sesión por defecto
+            setSelectedSessionId(null);
+            setCurrentSessionDuration(DEFAULT_SESSION_DURATION);
+            setTimeLeft(DEFAULT_SESSION_DURATION);
+            await AsyncStorage.setItem('selectedSession', 'revision-expediente');
+          }
         } else {
           const session = SESSIONS.find(s => s.id === selectedSession);
           if (session) {
@@ -296,12 +365,15 @@ export default function TimerScreen() {
       // Sincronizar con calendario si está habilitado (premium)
       if (isPremium) {
         try {
-          await syncSessionToCalendar({
-            phase: currentPhase,
-            sessionType: selectedSessionId || 'default',
-            timestamp: timestamp,
-            duration: duration,
-          });
+          const calendarSyncEnabled = await isCalendarSyncEnabled();
+          if (calendarSyncEnabled) {
+            await syncSessionToCalendar({
+              phase: currentPhase,
+              sessionType: selectedSessionId || 'default',
+              timestamp: timestamp,
+              duration: duration,
+            });
+          }
         } catch (error) {
           console.error('Error sincronizando con calendario:', error);
         }
@@ -338,7 +410,9 @@ export default function TimerScreen() {
     ]).start();
 
     // Auto-iniciar siguiente fase si está habilitado (premium)
-    if (autoStart && isPremium) {
+    // Verificar premium nuevamente antes de auto-iniciar
+    const currentIsPremium = isPremium;
+    if (autoStart && currentIsPremium) {
       setTimeout(() => {
         if (currentPhase === 'trabajo') {
           const newCycles = cycles + 1;
@@ -388,11 +462,18 @@ export default function TimerScreen() {
     previousPhase.current = currentPhase;
   }, [currentPhase, timeLeft]);
 
-  const toggleTimer = () => {
+  const toggleTimer = async () => {
     console.log('Timer toggled, current state:', { isRunning, timeLeft });
     
-    // Modo Comprometido: no permitir pausar si hay una sesión activa
-    if (committedMode && isRunning && sessionStartTime.current !== null) {
+    // Verificar premium antes de aplicar modo comprometido
+    // Si perdió premium durante sesión activa, desactivar modo comprometido
+    if (!isPremium && committedMode) {
+      setCommittedMode(false);
+      await AsyncStorage.setItem('committedMode', 'false');
+    }
+    
+    // Modo Comprometido: no permitir pausar si hay una sesión activa (solo si es premium)
+    if (isPremium && committedMode && isRunning && sessionStartTime.current !== null) {
       Alert.alert(
         'Modo Comprometido',
         'No puedes pausar una sesión activa en Modo Comprometido. Debes completarla.'
@@ -416,8 +497,8 @@ export default function TimerScreen() {
   };
 
   const resetPeriod = async () => {
-    // Modo Comprometido: no permitir reset si hay una sesión activa
-    if (committedMode && isRunning && sessionStartTime.current !== null) {
+    // Modo Comprometido: no permitir reset si hay una sesión activa (solo si es premium)
+    if (isPremium && committedMode && isRunning && sessionStartTime.current !== null) {
       Alert.alert(
         'Modo Comprometido',
         'No puedes cancelar una sesión activa en Modo Comprometido. Debes completarla.'

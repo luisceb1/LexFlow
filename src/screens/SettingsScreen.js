@@ -38,6 +38,51 @@ export default function SettingsScreen({ navigation }) {
     loadSettings();
   }, []);
 
+  // Deshabilitar funciones premium si el usuario pierde premium
+  useEffect(() => {
+    const disablePremiumFeatures = async () => {
+      if (!isPremium) {
+        // Deshabilitar bloqueador de apps si no es premium
+        if (appBlocker) {
+          setAppBlocker(false);
+          await saveSetting('appBlocker', false);
+          await updateAppBlocker(false);
+        }
+        // Deshabilitar auto-inicio si no es premium
+        if (autoStart) {
+          setAutoStart(false);
+          await saveSetting('autoStart', false);
+        }
+        // Deshabilitar sincronización con calendario si no es premium
+        if (calendarSync) {
+          setCalendarSync(false);
+          await saveSetting('calendarSync', false);
+        }
+        // Deshabilitar modo comprometido si no es premium
+        if (committedMode) {
+          setCommittedMode(false);
+          await saveSetting('committedMode', false);
+        }
+        // Cambiar sesión personalizada a sesión por defecto si no es premium
+        if (selectedSession === 'personalizada') {
+          setSelectedSession('revision-expediente');
+          await saveSetting('selectedSession', 'revision-expediente');
+        }
+        // Limpiar duración personalizada si no es premium
+        await saveSetting('customDuration', 25);
+        setCustomDuration(25);
+      }
+    };
+    disablePremiumFeatures();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPremium, appBlocker, autoStart, calendarSync, committedMode, selectedSession]);
+
+  // Recargar configuración cuando cambia isPremium
+  useEffect(() => {
+    loadSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPremium]);
+
   const loadSettings = async () => {
     try {
       const notif = await AsyncStorage.getItem('notificationsEnabled');
@@ -49,15 +94,46 @@ export default function SettingsScreen({ navigation }) {
       const customDur = await AsyncStorage.getItem('customDuration');
 
       if (notif !== null) setNotificationsEnabled(notif === 'true');
-      if (auto !== null) setAutoStart(auto === 'true');
-      if (calendar !== null) setCalendarSync(calendar === 'true');
-      if (committed !== null) setCommittedMode(committed === 'true');
-      if (blocker !== null) setAppBlocker(blocker === 'true');
-      if (session) setSelectedSession(session);
+      // Solo cargar funciones premium si el usuario es premium
+      if (auto !== null) {
+        setAutoStart(isPremium && auto === 'true');
+      }
+      if (calendar !== null) {
+        setCalendarSync(isPremium && calendar === 'true');
+      }
+      if (committed !== null) {
+        setCommittedMode(isPremium && committed === 'true');
+      }
+      // Solo cargar bloqueador si el usuario es premium
+      if (blocker !== null && isPremium) {
+        setAppBlocker(blocker === 'true');
+      } else if (blocker === 'true' && !isPremium) {
+        // Si el bloqueador estaba habilitado pero el usuario no es premium, deshabilitarlo
+        setAppBlocker(false);
+        await saveSetting('appBlocker', false);
+        await updateAppBlocker(false);
+      }
+      // Solo cargar sesión personalizada si el usuario es premium
+      if (session) {
+        if (session === 'personalizada' && !isPremium) {
+          // Si la sesión es personalizada pero el usuario no es premium, cambiar a sesión por defecto
+          setSelectedSession('revision-expediente');
+          await saveSetting('selectedSession', 'revision-expediente');
+        } else {
+          setSelectedSession(session);
+        }
+      }
+      // Solo cargar duración personalizada si el usuario es premium
       if (customDur !== null) {
         const minutes = parseInt(customDur, 10);
         if (!isNaN(minutes) && minutes > 0) {
-          setCustomDuration(minutes);
+          if (isPremium) {
+            setCustomDuration(minutes);
+          } else {
+            // Si no es premium, limpiar la duración personalizada guardada
+            await saveSetting('customDuration', 25);
+            setCustomDuration(25);
+          }
         }
       }
     } catch (error) {
@@ -99,7 +175,7 @@ export default function SettingsScreen({ navigation }) {
       Alert.alert('Función Premium', 'Esta función requiere suscripción premium');
       return;
     }
-    
+
     if (value) {
       // Solicitar permisos de calendario
       const hasPermission = await requestCalendarPermissions();
@@ -111,7 +187,7 @@ export default function SettingsScreen({ navigation }) {
         return;
       }
     }
-    
+
     setCalendarSync(value);
     saveSetting('calendarSync', value);
   };
@@ -307,8 +383,8 @@ export default function SettingsScreen({ navigation }) {
       borderRadius: 8,
       marginBottom: 8,
       borderWidth: 1,
-      borderColor: selectedSession === sessions.find(s => s.id === 'personalizada')?.id 
-        ? colors.primary 
+      borderColor: selectedSession === sessions.find(s => s.id === 'personalizada')?.id
+        ? colors.primary
         : colors.border,
     },
     sessionButtonText: {
@@ -524,7 +600,7 @@ export default function SettingsScreen({ navigation }) {
   const getLongBreakTime = () => {
     return `${Math.floor(TIMER_DURATIONS.LONG_BREAK / 60)} min`;
   };
-  
+
   // Obtener el tiempo de trabajo de la sesión seleccionada
   const getSelectedWorkTime = () => {
     if (selectedSession === 'personalizada') {
@@ -539,6 +615,13 @@ export default function SettingsScreen({ navigation }) {
 
   // Guardar duración personalizada
   const handleSaveCustomDuration = () => {
+    // Verificar que el usuario es premium antes de guardar
+    if (!isPremium) {
+      Alert.alert('Función Premium', 'Esta función requiere suscripción premium');
+      setShowCustomDurationModal(false);
+      return;
+    }
+
     const minutes = parseInt(tempCustomDuration, 10);
     if (isNaN(minutes) || minutes <= 0) {
       Alert.alert('Error', 'Por favor, ingresa un número válido de minutos (mayor a 0)');
@@ -613,7 +696,7 @@ export default function SettingsScreen({ navigation }) {
         {/* Sesiones */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sesiones</Text>
-          
+
           {/* Mostrar tiempos de trabajo y descanso */}
           <View style={styles.timeInfoRow}>
             <Text style={styles.timeInfoLabel}>Duración de trabajo:</Text>
@@ -624,7 +707,7 @@ export default function SettingsScreen({ navigation }) {
               (según ciclo seleccionado)
             </Text>
           </View>
-          
+
           <View style={styles.timeInfoRow}>
             <Text style={styles.timeInfoLabel}>Duración de pausa:</Text>
             <View style={styles.timePill}>
@@ -633,7 +716,7 @@ export default function SettingsScreen({ navigation }) {
               </Text>
             </View>
           </View>
-          
+
           <View style={styles.timeInfoRow}>
             <Text style={styles.timeInfoLabel}>Ciclo:</Text>
             {!isPremium && (
@@ -659,9 +742,13 @@ export default function SettingsScreen({ navigation }) {
                 if (session.premium && !isPremium) {
                   Alert.alert('Función Premium', 'Esta sesión requiere suscripción premium');
                 } else if (session.id === 'personalizada') {
-                  // Si es sesión personalizada, abrir modal para configurar duración
-                  setTempCustomDuration(customDuration.toString());
-                  setShowCustomDurationModal(true);
+                  // Si es sesión personalizada, verificar premium y abrir modal
+                  if (!isPremium) {
+                    Alert.alert('Función Premium', 'Esta sesión requiere suscripción premium');
+                  } else {
+                    setTempCustomDuration(customDuration.toString());
+                    setShowCustomDurationModal(true);
+                  }
                 } else {
                   setSelectedSession(session.id);
                   saveSetting('selectedSession', session.id);
@@ -773,28 +860,30 @@ export default function SettingsScreen({ navigation }) {
         {/* Sincronizar con Calendario (Premium) */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Sincronización</Text>
-          <TouchableOpacity 
-            style={styles.settingRow}
-            onPress={() => {
-              if (!isPremium) {
-                Alert.alert('Función Premium', 'Esta función requiere suscripción premium');
-              }
-            }}
-            disabled={isPremium}
-          >
-            <View style={styles.settingRowLeft}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
-                <Text style={[styles.settingLabel, { flexShrink: 1 }]} numberOfLines={2}>Sincronizar con Calendario</Text>
-                {!isPremium && (
-                  <View style={styles.premiumBadge}>
-                    <Text style={styles.premiumBadgeText}>PREMIUM</Text>
-                  </View>
-                )}
+          <View style={styles.settingRow}>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+              onPress={() => {
+                if (!isPremium) {
+                  Alert.alert('Función Premium', 'Esta función requiere suscripción premium');
+                }
+              }}
+              disabled={isPremium}
+            >
+              <View style={styles.settingRowLeft}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
+                  <Text style={[styles.settingLabel, { flexShrink: 1 }]} numberOfLines={2}>Sincronizar con Calendario</Text>
+                  {!isPremium && (
+                    <View style={styles.premiumBadge}>
+                      <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.settingDescription} numberOfLines={2}>
+                  Registra sesiones en tu calendario
+                </Text>
               </View>
-              <Text style={styles.settingDescription} numberOfLines={2}>
-                Registra sesiones en tu calendario
-              </Text>
-            </View>
+            </TouchableOpacity>
             {isPremium && (
               <Switch
                 value={calendarSync}
@@ -802,34 +891,36 @@ export default function SettingsScreen({ navigation }) {
                 trackColor={{ false: colors.border, true: colors.primary }}
               />
             )}
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Modo Comprometido (Premium) */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Productividad</Text>
-          <TouchableOpacity 
-            style={styles.settingRow}
-            onPress={() => {
-              if (!isPremium) {
-                Alert.alert('Función Premium', 'Esta función requiere suscripción premium');
-              }
-            }}
-            disabled={isPremium}
-          >
-            <View style={styles.settingRowLeft}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
-                <Text style={[styles.settingLabel, { flexShrink: 1 }]} numberOfLines={2}>Modo Comprometido</Text>
-                {!isPremium && (
-                  <View style={styles.premiumBadge}>
-                    <Text style={styles.premiumBadgeText}>PREMIUM</Text>
-                  </View>
-                )}
+          <View style={styles.settingRow}>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+              onPress={() => {
+                if (!isPremium) {
+                  Alert.alert('Función Premium', 'Esta función requiere suscripción premium');
+                }
+              }}
+              disabled={isPremium}
+            >
+              <View style={styles.settingRowLeft}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
+                  <Text style={[styles.settingLabel, { flexShrink: 1 }]} numberOfLines={2}>Modo Comprometido</Text>
+                  {!isPremium && (
+                    <View style={styles.premiumBadge}>
+                      <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.settingDescription} numberOfLines={2}>
+                  Bloquea la cancelación de sesiones activas
+                </Text>
               </View>
-              <Text style={styles.settingDescription} numberOfLines={2}>
-                Bloquea la cancelación de sesiones activas
-              </Text>
-            </View>
+            </TouchableOpacity>
             {isPremium && (
               <Switch
                 value={committedMode}
@@ -837,31 +928,33 @@ export default function SettingsScreen({ navigation }) {
                 trackColor={{ false: colors.border, true: colors.primary }}
               />
             )}
-          </TouchableOpacity>
+          </View>
 
           {/* Bloqueador de Apps (Premium) */}
-          <TouchableOpacity 
-            style={styles.settingRow}
-            onPress={() => {
-              if (!isPremium) {
-                Alert.alert('Función Premium', 'Esta función requiere suscripción premium');
-              }
-            }}
-            disabled={isPremium}
-          >
-            <View style={styles.settingRowLeft}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
-                <Text style={[styles.settingLabel, { flexShrink: 1 }]} numberOfLines={2}>Bloqueador de Apps</Text>
-                {!isPremium && (
-                  <View style={styles.premiumBadge}>
-                    <Text style={styles.premiumBadgeText}>PREMIUM</Text>
-                  </View>
-                )}
+          <View style={styles.settingRow}>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+              onPress={() => {
+                if (!isPremium) {
+                  Alert.alert('Función Premium', 'Esta función requiere suscripción premium');
+                }
+              }}
+              disabled={isPremium}
+            >
+              <View style={styles.settingRowLeft}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
+                  <Text style={[styles.settingLabel, { flexShrink: 1 }]} numberOfLines={2}>Bloqueador de Apps</Text>
+                  {!isPremium && (
+                    <View style={styles.premiumBadge}>
+                      <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.settingDescription} numberOfLines={2}>
+                  Limita el acceso a otras apps durante sesiones
+                </Text>
               </View>
-              <Text style={styles.settingDescription} numberOfLines={2}>
-                Limita el acceso a otras apps durante sesiones
-              </Text>
-            </View>
+            </TouchableOpacity>
             {isPremium && (
               <Switch
                 value={appBlocker}
@@ -869,7 +962,7 @@ export default function SettingsScreen({ navigation }) {
                 trackColor={{ false: colors.border, true: colors.primary }}
               />
             )}
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Modal para configurar duración personalizada */}
@@ -888,10 +981,10 @@ export default function SettingsScreen({ navigation }) {
                 Ingresa la duración en minutos para tu sesión personalizada
               </Text>
               <TextInput
-                style={[styles.modalInput, { 
-                  backgroundColor: colors.surface, 
+                style={[styles.modalInput, {
+                  backgroundColor: colors.surface,
                   color: colors.text,
-                  borderColor: colors.border 
+                  borderColor: colors.border
                 }]}
                 value={tempCustomDuration}
                 onChangeText={setTempCustomDuration}

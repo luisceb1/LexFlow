@@ -34,6 +34,9 @@ export const initializeAppBlocker = async () => {
  * Configura los listeners del bloqueador
  */
 const setupAppBlocker = () => {
+  // Limpiar listeners existentes antes de crear nuevos para evitar duplicados
+  cleanupAppBlocker();
+  
   // Listener para cambios de estado de la app (iOS y Android)
   appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
   
@@ -74,9 +77,14 @@ const handleBackPress = () => {
 
 /**
  * Activa el bloqueador para una sesión
+ * Solo se activa si el bloqueador está habilitado
  */
-export const startSessionBlock = () => {
-  isSessionActive = true;
+export const startSessionBlock = async () => {
+  // Verificar si el bloqueador está habilitado antes de activar
+  const enabled = await isAppBlockerEnabled();
+  if (enabled) {
+    isSessionActive = true;
+  }
 };
 
 /**
